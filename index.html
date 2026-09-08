@@ -215,7 +215,7 @@
   </div>
 
   <script>
-    // ⚠️ [중요] 본인의 Firebase 설정 값으로 교체해야 전 세계 사용자와 데이터가 공유됩니다!
+    // Firebase 키 설정 (다른 학생 기기와 실시간 연동 시 본인 키로 교체)
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -226,9 +226,19 @@
       appId: "YOUR_APP_ID"
     };
 
-    // Firebase 초기화
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
+    let database = null;
+    let useFirebase = false;
+
+    // Firebase 유효성 확인 후 안전하게 초기화
+    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+      try {
+        firebase.initializeApp(firebaseConfig);
+        database = firebase.database();
+        useFirebase = true;
+      } catch (e) {
+        console.warn("Firebase 연동 비활성화 (로컬 모드로 작동합니다):", e);
+      }
+    }
 
     let myDeviceId = localStorage.getItem('school_map_device_id');
     if (!myDeviceId) {
@@ -236,7 +246,8 @@
       localStorage.setItem('school_map_device_id', myDeviceId);
     }
 
-    let tempPins = [];
+    // 로컬 저장소에서 기존 데이터 로드
+    let tempPins = JSON.parse(localStorage.getItem('school_map_pins') || '[]');
     let isTeacher = false;
     let clickX = 0, clickY = 0;
     let selectedPinId = null;
@@ -245,17 +256,21 @@
 
     const mapContainer = document.getElementById('map-container');
 
-    // 🔄 Firebase 데이터 실시간 수신 (다른 사람이 작성하면 즉시 반영)
-    database.ref('pins').on('value', (snapshot) => {
-      const data = snapshot.val();
-      tempPins = [];
-      if (data) {
-        Object.keys(data).forEach(key => {
-          tempPins.push(data[key]);
-        });
-      }
-      renderPins();
-    });
+    // Firebase 실시간 수신
+    if (useFirebase && database) {
+      database.ref('pins').on('value', (snapshot) => {
+        const data = snapshot.val();
+        tempPins = [];
+        if (data) {
+          Object.keys(data).forEach(key => tempPins.push(data[key]));
+        }
+        localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
+        renderPins();
+      });
+    } else {
+      // 로컬 모드 즉시 렌더링
+      setTimeout(renderPins, 100);
+    }
 
     mapContainer.addEventListener('click', (e) => {
       if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
@@ -288,7 +303,7 @@
       openInputModal(currentSelectedPlace);
     }
 
-    // 💾 Firebase에 데이터 저장
+    // 💾 데이터 저장 (오류 방지 및 안정적인 등록 처리)
     function saveData() {
       const place = document.getElementById('input-place').value.trim();
       const emoji = document.getElementById('input-emoji').value;
@@ -318,15 +333,18 @@
         timestamp: Date.now()
       };
 
-      // 서버에 저장 (저장 즉시 .on('value') 이벤트에 의해 화면에 업데이트됨)
-      database.ref('pins/' + pinId).set(pinData)
-        .then(() => {
-          expandedClusterIndex = null;
-          closeModal('input-modal');
-        })
-        .catch((error) => {
-          alert('저장 중 오류가 발생했습니다: ' + error.message);
-        });
+      // 1. 로컬에 즉시 등록
+      tempPins.push(pinData);
+      localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
+
+      // 2. Firebase 활성화 시 서버에 전송
+      if (useFirebase && database) {
+        database.ref('pins/' + pinId).set(pinData).catch(err => console.error(err));
+      }
+
+      expandedClusterIndex = null;
+      renderPins();
+      closeModal('input-modal');
     }
 
     function groupPinsIntoClusters(pins) {
@@ -452,16 +470,20 @@
       return pinEl;
     }
 
-    // 🗑️ Firebase에서 데이터 삭제
     function deleteCurrentPin() {
       if (!selectedPinId) return;
 
       if (confirm('이 장소감을 정말 삭제하시겠습니까?')) {
-        database.ref('pins/' + selectedPinId).remove()
-          .then(() => {
-            expandedClusterIndex = null;
-            closeModal('view-modal');
-          });
+        tempPins = tempPins.filter(p => p.id !== selectedPinId);
+        localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
+
+        if (useFirebase && database) {
+          database.ref('pins/' + selectedPinId).remove();
+        }
+
+        expandedClusterIndex = null;
+        renderPins();
+        closeModal('view-modal');
       }
     }
 
