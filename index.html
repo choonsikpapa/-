@@ -41,7 +41,7 @@
     .pin {
       position: absolute;
       transform: translate(-50%, -50%);
-      font-size: 26px;
+      font-size: 24px;
       cursor: pointer;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
       transition: transform 0.15s ease;
@@ -72,13 +72,13 @@
     }
     .form-group textarea { resize: none; }
     
-    .btn-group { display: flex; gap: 8px; margin-top: 16px; }
+    .btn-group { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+    .btn-row { display: flex; gap: 8px; }
     button { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
     .btn-primary { background: #4f46e5; color: white; }
     .btn-secondary { background: #f1f5f9; color: #475569; }
     .btn-danger { background: #ef4444; color: white; }
 
-    /* 상세보기 내부 스타일 */
     .view-emoji-box { font-size: 48px; text-align: center; margin-bottom: 10px; }
     .view-text-box { 
       background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; 
@@ -87,7 +87,6 @@
     }
     .view-author-box { font-size: 12px; color: #ef4444; font-weight: bold; margin-top: 8px; text-align: right; }
 
-    /* 하단 교사 컨트롤바 */
     .admin-bar { margin-top: 15px; display: flex; gap: 8px; align-items: center; }
     .admin-btn { background: #e2e8f0; color: #334155; padding: 6px 12px; font-size: 12px; border-radius: 20px; border: none; }
     .teacher-badge { background: #ef4444; color: white; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; display: none; }
@@ -100,7 +99,6 @@
     <p>지도를 터치하여 이모지와 장소감을 느껴보세요!</p>
   </div>
 
-  <!-- 지도 영역 -->
   <div id="map-container">
     <img id="map-img" src="map.jpg" alt="2026학년도 학교 구조도">
   </div>
@@ -117,13 +115,12 @@
       <div class="form-group">
         <label>표현할 이모지</label>
         <select id="input-emoji">
-          <option value="😊">😊 기쁨 / 즐거움</option>
-          <option value="🌿">🌿 편안함 / 휴식</option>
-          <option value="😱">😱 무서움 / 부담감</option>
-          <option value="😴">😴 피곤함 / 지루함</option>
-          <option value="🔥">🔥 열정 / 집중</option>
-          <option value="🍔">🍔 맛있는 음식/신남</option>
-          <option value="💬">💬 수다 / 친구와 함께</option>
+          <option value="🥰">🥰 좋음</option>
+          <option value="🤣">🤣 재미</option>
+          <option value="😎">😎 힙함</option>
+          <option value="😢">😢 슬픔</option>
+          <option value="😡">😡 화남</option>
+          <option value="😐">😐 그냥그래</option>
         </select>
       </div>
       <div class="form-group">
@@ -135,35 +132,38 @@
         <input type="text" id="input-author" placeholder="예: 10201 홍길동">
       </div>
       <div class="btn-group">
-        <button class="btn-secondary" onclick="closeModal('input-modal')">취소</button>
-        <button class="btn-primary" onclick="saveData()">등록하기</button>
+        <div class="btn-row">
+          <button class="btn-secondary" onclick="closeModal('input-modal')">취소</button>
+          <button class="btn-primary" onclick="saveData()">등록하기</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 상세보기 및 삭제 모달 -->
+  <!-- 상세보기 모달 -->
   <div id="view-modal" class="modal">
     <div class="modal-content">
-      <div id="view-emoji" class="view-emoji-box">😊</div>
+      <div id="view-emoji" class="view-emoji-box">🥰</div>
       <div id="view-text" class="view-text-box">장소감 내용이 출력됩니다.</div>
       <div id="view-author" class="view-author-box"></div>
       
       <div class="btn-group">
-        <button id="btn-delete" class="btn-danger" style="display: none;" onclick="deleteCurrentPin()">삭제하기</button>
-        <button class="btn-secondary" onclick="closeModal('view-modal')">닫기</button>
+        <button class="btn-primary" onclick="addSameLocation()">➕ 나도 이 장소에 남기기</button>
+        <div class="btn-row">
+          <button id="btn-delete" class="btn-danger" style="display: none;" onclick="deleteCurrentPin()">삭제</button>
+          <button class="btn-secondary" onclick="closeModal('view-modal')">닫기</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    // 기기 고유 ID
     let myDeviceId = localStorage.getItem('school_map_device_id');
     if (!myDeviceId) {
       myDeviceId = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
       localStorage.setItem('school_map_device_id', myDeviceId);
     }
 
-    // Firebase 설정 (필요 시 정보 입력)
     const firebaseConfig = {
       apiKey: "YOUR_API_KEY",
       authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
@@ -188,13 +188,22 @@
       clickX = ((e.clientX - rect.left) / rect.width) * 100;
       clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
+      openInputModal();
+    });
+
+    function openInputModal() {
       document.getElementById('input-text').value = '';
       document.getElementById('input-author').value = '';
       openModal('input-modal');
-    });
+    }
 
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    function addSameLocation() {
+      closeModal('view-modal');
+      openInputModal();
+    }
 
     function saveData() {
       const emoji = document.getElementById('input-emoji').value;
@@ -208,10 +217,13 @@
 
       const pinId = 'pin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
+      const offsetX = (Math.random() - 0.5) * 1.6;
+      const offsetY = (Math.random() - 0.5) * 1.6;
+
       const pinData = {
         id: pinId,
-        x: clickX,
-        y: clickY,
+        x: Math.min(Math.max(clickX + offsetX, 2), 98),
+        y: Math.min(Math.max(clickY + offsetY, 2), 98),
         emoji: emoji,
         text: text,
         author: author,
@@ -237,6 +249,8 @@
         pinEl.addEventListener('click', (e) => {
           e.stopPropagation();
           selectedPinId = data.id;
+          clickX = data.x;
+          clickY = data.y;
 
           document.getElementById('view-emoji').innerText = data.emoji;
           document.getElementById('view-text').innerText = data.text;
