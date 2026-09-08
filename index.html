@@ -13,9 +13,44 @@
     * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, sans-serif; }
     body { margin: 0; padding: 15px 10px; background-color: #f8fafc; display: flex; flex-direction: column; align-items: center; }
     
-    .header { text-align: center; margin-bottom: 15px; width: 100%; max-width: 600px; }
+    .header { text-align: center; margin-bottom: 12px; width: 100%; max-width: 600px; }
     .header h1 { font-size: 20px; color: #1e293b; margin: 0 0 6px 0; }
-    .header p { font-size: 13px; color: #64748b; margin: 0; }
+    .header p { font-size: 13px; color: #64748b; margin: 0 0 10px 0; }
+
+    /* 학급 선택 바 */
+    .class-selector-box {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 8px 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+      margin-bottom: 6px;
+    }
+    .class-selector-box label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .class-selector-box select {
+      padding: 6px 12px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #4f46e5;
+      border: 1px solid #c7d2fe;
+      background-color: #eef2ff;
+      border-radius: 6px;
+      outline: none;
+      cursor: pointer;
+    }
+    .class-selector-box select:disabled {
+      background-color: #f1f5f9;
+      color: #64748b;
+      border-color: #cbd5e1;
+      cursor: not-allowed;
+    }
 
     /* 지도 컨테이너 */
     #map-container {
@@ -27,9 +62,20 @@
       border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      touch-action: manipulation;
+      touch-action: none;
+      user-select: none;
     }
     
+    #map-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-origin: 0 0;
+      transition: transform 0.1s ease-out;
+      cursor: grab;
+    }
+    #map-wrapper:active { cursor: grabbing; }
+
     #map-img {
       width: 100%;
       height: auto;
@@ -38,19 +84,45 @@
       -webkit-user-drag: none;
     }
 
-    /* 지도 위에 찍히는 이모지 핀 */
+    /* Zoom 조종 버튼 */
+    .zoom-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 50;
+    }
+    .zoom-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #cbd5e1;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      font-size: 16px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+    .zoom-btn:active { background: #e2e8f0; transform: scale(0.95); }
+
+    /* 이모지 핀 */
     .pin {
       position: absolute;
       transform: translate(-50%, -50%);
       font-size: 26px;
       cursor: pointer;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
-      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
       z-index: 10;
     }
     .pin:active { transform: translate(-50%, -50%) scale(1.3); }
 
-    /* 펼쳐진 이모지 강조 효과 */
     .pin.expanded {
       z-index: 20;
       animation: popIn 0.3s ease-out;
@@ -61,7 +133,6 @@
       100% { transform: translate(-50%, -50%) scale(1); }
     }
 
-    /* 겹친 이모지 개수 표시 배지 */
     .cluster-badge {
       position: absolute;
       transform: translate(-50%, -50%);
@@ -77,7 +148,6 @@
       z-index: 15;
     }
 
-    /* 펼쳐질 때 중심점을 나타내는 보조 원 */
     .cluster-center-ring {
       position: absolute;
       transform: translate(-50%, -50%);
@@ -94,15 +164,17 @@
     .modal {
       display: none;
       position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
+      top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(15, 23, 42, 0.6);
       backdrop-filter: blur(4px);
       justify-content: center; align-items: center;
-      z-index: 100; padding: 20px;
+      z-index: 1000; padding: 20px;
     }
     .modal-content {
       background: white; padding: 20px; border-radius: 16px;
-      width: 100%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      width: 100%; max-width: 360px; 
+      max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     }
     .modal-content h3 { margin: 0 0 15px 0; font-size: 18px; color: #0f172a; text-align: center; }
     
@@ -120,7 +192,6 @@
     .btn-secondary { background: #f1f5f9; color: #475569; }
     .btn-danger { background: #ef4444; color: white; }
 
-    /* 상세보기 스타일 */
     .view-emoji-box { font-size: 44px; text-align: center; margin-bottom: 6px; }
     .view-place-badge { 
       text-align: center; font-weight: 700; font-size: 15px; color: #4f46e5; 
@@ -144,10 +215,29 @@
   <div class="header">
     <h1>🏫 우리 학교 장소감 지도</h1>
     <p>지도를 터치하여 장소 이름과 장소감을 남겨보세요!</p>
+    
+    <div class="class-selector-box">
+      <label for="class-select">👥 수업 학급:</label>
+      <select id="class-select" onchange="changeClass(this.value)">
+        <option value="class1">1반</option>
+        <option value="class2">2반</option>
+        <option value="class3">3반</option>
+        <option value="class4">4반</option>
+        <option value="class5">5반</option>
+      </select>
+    </div>
   </div>
 
   <div id="map-container">
-    <img id="map-img" src="map.jpg" alt="학교 구조도">
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()" title="확대">➕</button>
+      <button class="zoom-btn" onclick="zoomOut()" title="축소">➖</button>
+      <button class="zoom-btn" onclick="resetZoom()" title="초기화">🔄</button>
+    </div>
+
+    <div id="map-wrapper">
+      <img id="map-img" src="map.jpg" alt="학교 구조도">
+    </div>
   </div>
 
   <div class="admin-bar">
@@ -215,7 +305,6 @@
   </div>
 
   <script>
-    // Firebase 연동 설정 (발급된 키 적용 완료)
     const firebaseConfig = {
       apiKey: "AIzaSyApMPAqxrQGJfE_1V-tfykFYTX-VZ7I22E",
       authDomain: "hanjitam01.firebaseapp.com",
@@ -229,7 +318,6 @@
     let database = null;
     let useFirebase = false;
 
-    // Firebase 유효성 확인 후 초기화
     if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
       try {
         firebase.initializeApp(firebaseConfig);
@@ -246,7 +334,9 @@
       localStorage.setItem('school_map_device_id', myDeviceId);
     }
 
-    let tempPins = JSON.parse(localStorage.getItem('school_map_pins') || '[]');
+    let currentClass = 'class1';
+    let currentClassRef = null;
+    let tempPins = [];
     let isTeacher = false;
     let clickX = 0, clickY = 0;
     let selectedPinId = null;
@@ -254,36 +344,107 @@
     let expandedClusterIndex = null;
 
     const mapContainer = document.getElementById('map-container');
+    const mapWrapper = document.getElementById('map-wrapper');
 
-    // Firebase 실시간 데이터 동기화
-    if (useFirebase && database) {
-      database.ref('pins').on('value', (snapshot) => {
-        const data = snapshot.val();
-        tempPins = [];
-        if (data) {
-          Object.keys(data).forEach(key => tempPins.push(data[key]));
-        }
-        localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
-        renderPins();
-      });
-    } else {
-      setTimeout(renderPins, 100);
+    let currentScale = 1;
+    let panX = 0, panY = 0;
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let hasMoved = false;
+
+    function updateMapTransform() {
+      const rect = mapContainer.getBoundingClientRect();
+      const maxPanX = 0;
+      const minPanX = rect.width * (1 - currentScale);
+      const maxPanY = 0;
+      const minPanY = rect.height * (1 - currentScale);
+
+      if (currentScale === 1) {
+        panX = 0; panY = 0;
+      } else {
+        panX = Math.min(maxPanX, Math.max(minPanX, panX));
+        panY = Math.min(maxPanY, Math.max(minPanY, panY));
+      }
+      mapWrapper.style.transform = `translate(${panX}px, ${panY}px) scale(${currentScale})`;
     }
 
-    mapContainer.addEventListener('click', (e) => {
-      if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
+    function zoomIn() { if (currentScale < 3) { currentScale += 0.5; updateMapTransform(); } }
+    function zoomOut() { if (currentScale > 1) { currentScale -= 0.5; if (currentScale === 1) { panX = 0; panY = 0; } updateMapTransform(); } }
+    function resetZoom() { currentScale = 1; panX = 0; panY = 0; updateMapTransform(); }
 
-      if (expandedClusterIndex !== null) {
-        expandedClusterIndex = null;
-        renderPins();
-        return;
+    mapContainer.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.zoom-controls')) return;
+      isDragging = true; hasMoved = false;
+      startX = e.clientX - panX; startY = e.clientY - panY;
+      mapContainer.setPointerCapture(e.pointerId);
+    });
+
+    mapContainer.addEventListener('pointermove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      if (currentScale > 1) {
+        if (Math.abs(dx - panX) > 4 || Math.abs(dy - panY) > 4) hasMoved = true;
+        panX = dx; panY = dy;
+        updateMapTransform();
       }
+    });
 
-      const rect = mapContainer.getBoundingClientRect();
-      clickX = ((e.clientX - rect.left) / rect.width) * 100;
-      clickY = ((e.clientY - rect.top) / rect.height) * 100;
+    mapContainer.addEventListener('pointerup', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      if (!hasMoved) handleMapClick(e);
+    });
 
+    function handleMapClick(e) {
+      if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
+      if (expandedClusterIndex !== null) {
+        expandedClusterIndex = null; renderPins(); return;
+      }
+      const rect = mapWrapper.getBoundingClientRect();
+      clickX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+      clickY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
       openInputModal('');
+    }
+
+    function changeClass(classId) {
+      if (currentClassRef && useFirebase) currentClassRef.off();
+      currentClass = classId;
+      tempPins = JSON.parse(localStorage.getItem('school_map_pins_' + currentClass) || '[]');
+      expandedClusterIndex = null;
+      renderPins();
+
+      if (useFirebase && database) {
+        currentClassRef = database.ref('pins/' + currentClass);
+        currentClassRef.on('value', (snapshot) => {
+          const data = snapshot.val();
+          tempPins = [];
+          if (data) Object.keys(data).forEach(key => tempPins.push(data[key]));
+          localStorage.setItem('school_map_pins_' + currentClass, JSON.stringify(tempPins));
+          renderPins();
+        });
+      }
+    }
+
+    // 🔗 URL 파라미터(?class=class2) 확인 및 자동 세팅
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlClass = urlParams.get('class');
+      const selectEl = document.getElementById('class-select');
+
+      if (urlClass) {
+        let targetClass = urlClass;
+        if (!targetClass.startsWith('class')) {
+          targetClass = 'class' + targetClass;
+        }
+
+        if (selectEl.querySelector(`option[value="${targetClass}"]`)) {
+          selectEl.value = targetClass;
+          selectEl.disabled = true; // URL로 지정된 경우 학생들이 반을 바꾸지 못하게 고정
+          changeClass(targetClass);
+          return;
+        }
+      }
+      changeClass('class1');
     });
 
     function openInputModal(defaultPlace = '') {
@@ -296,47 +457,26 @@
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-    function addSameLocation() {
-      closeModal('view-modal');
-      openInputModal(currentSelectedPlace);
-    }
+    function addSameLocation() { closeModal('view-modal'); openInputModal(currentSelectedPlace); }
 
-    // 데이터 저장 처리
     function saveData() {
       const place = document.getElementById('input-place').value.trim();
       const emoji = document.getElementById('input-emoji').value;
       const text = document.getElementById('input-text').value.trim();
       const author = document.getElementById('input-author').value.trim();
 
-      if (!place) {
-        alert('장소 이름을 입력해주세요!');
-        return;
-      }
-      if (!text || !author) {
-        alert('장소감 내용과 이름을 모두 입력해주세요!');
-        return;
+      if (!place || !text || !author) {
+        alert('모든 항목을 입력해주세요!'); return;
       }
 
       const pinId = 'pin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+      const pinData = { id: pinId, x: clickX, y: clickY, place, emoji, text, author, deviceId: myDeviceId, timestamp: Date.now() };
 
-      const pinData = {
-        id: pinId,
-        x: clickX,
-        y: clickY,
-        place: place,
-        emoji: emoji,
-        text: text,
-        author: author,
-        deviceId: myDeviceId,
-        timestamp: Date.now()
-      };
-
-      // 로컬 및 데이터베이스에 등록
       tempPins.push(pinData);
-      localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
+      localStorage.setItem('school_map_pins_' + currentClass, JSON.stringify(tempPins));
 
       if (useFirebase && database) {
-        database.ref('pins/' + pinId).set(pinData).catch(err => console.error(err));
+        database.ref('pins/' + currentClass + '/' + pinId).set(pinData);
       }
 
       expandedClusterIndex = null;
@@ -351,20 +491,14 @@
 
       for (let i = 0; i < pins.length; i++) {
         if (visited.has(pins[i].id)) continue;
-
         const cluster = [pins[i]];
         visited.add(pins[i].id);
 
         for (let j = i + 1; j < pins.length; j++) {
           if (visited.has(pins[j].id)) continue;
-
-          const dx = pins[i].x - pins[j].x;
-          const dy = pins[i].y - pins[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < threshold) {
-            cluster.push(pins[j]);
-            visited.add(pins[j].id);
+          const dx = pins[i].x - pins[j].x; const dy = pins[i].y - pins[j].y;
+          if (Math.sqrt(dx * dx + dy * dy) < threshold) {
+            cluster.push(pins[j]); visited.add(pins[j].id);
           }
         }
         clusters.push(cluster);
@@ -374,13 +508,11 @@
 
     function renderPins() {
       document.querySelectorAll('.pin, .cluster-badge, .cluster-center-ring').forEach(el => el.remove());
-
       const clusters = groupPinsIntoClusters(tempPins);
 
       clusters.forEach((cluster, index) => {
         const centerX = cluster.reduce((sum, p) => sum + p.x, 0) / cluster.length;
         const centerY = cluster.reduce((sum, p) => sum + p.y, 0) / cluster.length;
-
         const isExpanded = (expandedClusterIndex === index);
 
         if (cluster.length === 1) {
@@ -388,37 +520,25 @@
         } else {
           if (!isExpanded) {
             const topPin = createPinElement(cluster[cluster.length - 1], centerX, centerY);
-
             const badge = document.createElement('div');
-            badge.className = 'cluster-badge';
-            badge.innerText = `+${cluster.length}`;
-            badge.style.left = `${centerX + 2.2}%`;
-            badge.style.top = `${centerY - 2.2}%`;
+            badge.className = 'cluster-badge'; badge.innerText = `+${cluster.length}`;
+            badge.style.left = `${centerX + 2.2}%`; badge.style.top = `${centerY - 2.2}%`;
 
-            const expandHandler = (e) => {
-              e.stopPropagation();
-              expandedClusterIndex = index;
-              renderPins();
-            };
-
+            const expandHandler = (e) => { e.stopPropagation(); expandedClusterIndex = index; renderPins(); };
             badge.addEventListener('click', expandHandler);
             topPin.addEventListener('click', expandHandler);
-
-            mapContainer.appendChild(badge);
+            mapWrapper.appendChild(badge);
           } else {
             const ring = document.createElement('div');
             ring.className = 'cluster-center-ring';
-            ring.style.left = `${centerX}%`;
-            ring.style.top = `${centerY}%`;
-            mapContainer.appendChild(ring);
+            ring.style.left = `${centerX}%`; ring.style.top = `${centerY}%`;
+            mapWrapper.appendChild(ring);
 
             const radius = Math.min(4.5 + cluster.length * 0.5, 9);
-
             cluster.forEach((pinData, i) => {
               const angle = (2 * Math.PI * i) / cluster.length - (Math.PI / 2);
               const spreadX = Math.min(Math.max(centerX + radius * Math.cos(angle), 3), 97);
               const spreadY = Math.min(Math.max(centerY + radius * Math.sin(angle), 3), 97);
-
               const pinEl = createPinElement(pinData, spreadX, spreadY);
               pinEl.classList.add('expanded');
             });
@@ -430,15 +550,12 @@
     function createPinElement(data, x, y) {
       const pinEl = document.createElement('div');
       pinEl.className = 'pin';
-      pinEl.style.left = `${x}%`;
-      pinEl.style.top = `${y}%`;
+      pinEl.style.left = `${x}%`; pinEl.style.top = `${y}%`;
       pinEl.innerText = data.emoji;
 
       pinEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectedPinId = data.id;
-        clickX = data.x;
-        clickY = data.y;
+        selectedPinId = data.id; clickX = data.x; clickY = data.y;
         currentSelectedPlace = data.place || '학교 장소';
 
         document.getElementById('view-emoji').innerText = data.emoji;
@@ -453,48 +570,33 @@
           authorBox.style.display = 'none';
         }
 
-        const deleteBtn = document.getElementById('btn-delete');
-        if (data.deviceId === myDeviceId || isTeacher) {
-          deleteBtn.style.display = 'block';
-        } else {
-          deleteBtn.style.display = 'none';
-        }
-
+        document.getElementById('btn-delete').style.display = (data.deviceId === myDeviceId || isTeacher) ? 'block' : 'none';
         openModal('view-modal');
       });
 
-      mapContainer.appendChild(pinEl);
+      mapWrapper.appendChild(pinEl);
       return pinEl;
     }
 
     function deleteCurrentPin() {
       if (!selectedPinId) return;
-
       if (confirm('이 장소감을 정말 삭제하시겠습니까?')) {
         tempPins = tempPins.filter(p => p.id !== selectedPinId);
-        localStorage.setItem('school_map_pins', JSON.stringify(tempPins));
-
-        if (useFirebase && database) {
-          database.ref('pins/' + selectedPinId).remove();
-        }
-
-        expandedClusterIndex = null;
-        renderPins();
-        closeModal('view-modal');
+        localStorage.setItem('school_map_pins_' + currentClass, JSON.stringify(tempPins));
+        if (useFirebase && database) database.ref('pins/' + currentClass + '/' + selectedPinId).remove();
+        expandedClusterIndex = null; renderPins(); closeModal('view-modal');
       }
     }
 
     function toggleTeacherMode() {
       if (!isTeacher) {
-        const pwd = prompt('교사 비밀번호를 입력하세요:');
-        if (pwd === '1234') {
+        if (prompt('교사 비밀번호를 입력하세요:') === '1234') {
           isTeacher = true;
           document.getElementById('teacher-status').style.display = 'inline-block';
+          document.getElementById('class-select').disabled = false; // 교사모드에서는 드롭다운 잠금 해제
           alert('교사 모드가 활성화되었습니다.');
           renderPins();
-        } else {
-          alert('비밀번호가 틀렸습니다.');
-        }
+        } else alert('비밀번호가 틀렸습니다.');
       } else {
         isTeacher = false;
         document.getElementById('teacher-status').style.display = 'none';
