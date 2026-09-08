@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>우리 학교 장소감 지도</title>
+  
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
@@ -80,8 +81,8 @@
     .cluster-center-ring {
       position: absolute;
       transform: translate(-50%, -50%);
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border: 2px dashed #6366f1;
       border-radius: 50%;
       background: rgba(99, 102, 241, 0.15);
@@ -146,7 +147,7 @@
   </div>
 
   <div id="map-container">
-    <img id="map-img" src="map.jpg" alt="2026학년도 학교 구조도">
+    <img id="map-img" src="map.jpg" alt="학교 구조도">
   </div>
 
   <div class="admin-bar">
@@ -214,6 +215,21 @@
   </div>
 
   <script>
+    // ⚠️ [중요] 본인의 Firebase 설정 값으로 교체해야 전 세계 사용자와 데이터가 공유됩니다!
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Firebase 초기화
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
     let myDeviceId = localStorage.getItem('school_map_device_id');
     if (!myDeviceId) {
       myDeviceId = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
@@ -225,15 +241,25 @@
     let clickX = 0, clickY = 0;
     let selectedPinId = null;
     let currentSelectedPlace = '';
-    let expandedClusterIndex = null; // 현재 펼쳐진 그룹 번호
+    let expandedClusterIndex = null;
 
     const mapContainer = document.getElementById('map-container');
 
-    // 지도 빈 공간 클릭 시
+    // 🔄 Firebase 데이터 실시간 수신 (다른 사람이 작성하면 즉시 반영)
+    database.ref('pins').on('value', (snapshot) => {
+      const data = snapshot.val();
+      tempPins = [];
+      if (data) {
+        Object.keys(data).forEach(key => {
+          tempPins.push(data[key]);
+        });
+      }
+      renderPins();
+    });
+
     mapContainer.addEventListener('click', (e) => {
       if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
 
-      // 펼쳐진 클러스터가 있다면 닫기
       if (expandedClusterIndex !== null) {
         expandedClusterIndex = null;
         renderPins();
@@ -257,12 +283,12 @@
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
-    // 같은 장소에 내 느낌 추가
     function addSameLocation() {
       closeModal('view-modal');
       openInputModal(currentSelectedPlace);
     }
 
+    // 💾 Firebase에 데이터 저장
     function saveData() {
       const place = document.getElementById('input-place').value.trim();
       const emoji = document.getElementById('input-emoji').value;
@@ -270,7 +296,7 @@
       const author = document.getElementById('input-author').value.trim();
 
       if (!place) {
-        alert('장소 이름을 입력해주세요! (예: 급식실, 운동장)');
+        alert('장소 이름을 입력해주세요!');
         return;
       }
       if (!text || !author) {
@@ -292,15 +318,19 @@
         timestamp: Date.now()
       };
 
-      tempPins.push(pinData);
-      expandedClusterIndex = null;
-      renderPins();
-      closeModal('input-modal');
+      // 서버에 저장 (저장 즉시 .on('value') 이벤트에 의해 화면에 업데이트됨)
+      database.ref('pins/' + pinId).set(pinData)
+        .then(() => {
+          expandedClusterIndex = null;
+          closeModal('input-modal');
+        })
+        .catch((error) => {
+          alert('저장 중 오류가 발생했습니다: ' + error.message);
+        });
     }
 
-    // 근접한 핀들을 클러스터(그룹)로 묶는 함수
     function groupPinsIntoClusters(pins) {
-      const threshold = 3.5; // 3.5% 이내로 가까우면 겹친 것으로 판단
+      const threshold = 3.5;
       const clusters = [];
       const visited = new Set();
 
@@ -328,25 +358,20 @@
     }
 
     function renderPins() {
-      // 기존 핀, 배지, 안내 링 제거
       document.querySelectorAll('.pin, .cluster-badge, .cluster-center-ring').forEach(el => el.remove());
 
       const clusters = groupPinsIntoClusters(tempPins);
 
       clusters.forEach((cluster, index) => {
-        // 그룹의 중심 좌표 계산
         const centerX = cluster.reduce((sum, p) => sum + p.x, 0) / cluster.length;
         const centerY = cluster.reduce((sum, p) => sum + p.y, 0) / cluster.length;
 
         const isExpanded = (expandedClusterIndex === index);
 
         if (cluster.length === 1) {
-          // 단일 핀
           createPinElement(cluster[0], cluster[0].x, cluster[0].y);
         } else {
-          // 겹친 핀들 (2개 이상)
           if (!isExpanded) {
-            // 1. 접힌 상태: 대표 이모지 1개 + 개수 표시 배지 (+N)
             const topPin = createPinElement(cluster[cluster.length - 1], centerX, centerY);
 
             const badge = document.createElement('div');
@@ -366,14 +391,13 @@
 
             mapContainer.appendChild(badge);
           } else {
-            // 2. 펼쳐진 상태: 동그랗게 파열(Spiderfy)되어 주변으로 배치됨
             const ring = document.createElement('div');
             ring.className = 'cluster-center-ring';
             ring.style.left = `${centerX}%`;
             ring.style.top = `${centerY}%`;
             mapContainer.appendChild(ring);
 
-            const radius = Math.min(7 + cluster.length * 0.8, 14); // 핀 개수에 비례하는 반지름
+            const radius = Math.min(4.5 + cluster.length * 0.5, 9);
 
             cluster.forEach((pinData, i) => {
               const angle = (2 * Math.PI * i) / cluster.length - (Math.PI / 2);
@@ -428,14 +452,16 @@
       return pinEl;
     }
 
+    // 🗑️ Firebase에서 데이터 삭제
     function deleteCurrentPin() {
       if (!selectedPinId) return;
 
       if (confirm('이 장소감을 정말 삭제하시겠습니까?')) {
-        tempPins = tempPins.filter(p => p.id !== selectedPinId);
-        expandedClusterIndex = null;
-        renderPins();
-        closeModal('view-modal');
+        database.ref('pins/' + selectedPinId).remove()
+          .then(() => {
+            expandedClusterIndex = null;
+            closeModal('view-modal');
+          });
       }
     }
 
