@@ -22,12 +22,14 @@
       background: #ffffff;
       border: 1px solid #cbd5e1;
       border-radius: 10px;
-      padding: 8px 14px;
+      padding: 8px 12px;
       display: inline-flex;
       align-items: center;
       gap: 8px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
       margin-bottom: 6px;
+      flex-wrap: wrap;
+      justify-content: center;
     }
     .class-selector-box label {
       font-size: 13px;
@@ -35,7 +37,7 @@
       color: #334155;
     }
     .class-selector-box select {
-      padding: 6px 12px;
+      padding: 6px 10px;
       font-size: 14px;
       font-weight: bold;
       color: #4f46e5;
@@ -50,6 +52,17 @@
       color: #64748b;
       border-color: #cbd5e1;
       cursor: not-allowed;
+    }
+
+    .btn-qr-show {
+      background: #4f46e5;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
     }
 
     /* 지도 컨테이너 */
@@ -218,13 +231,14 @@
     
     <div class="class-selector-box">
       <label for="class-select">👥 수업 학급:</label>
-      <select id="class-select" onchange="changeClass(this.value)">
+      <select id="class-select" onchange="changeClass(this.value, true)">
         <option value="class1">1반</option>
         <option value="class2">2반</option>
         <option value="class3">3반</option>
         <option value="class4">4반</option>
         <option value="class5">5반</option>
       </select>
+      <button class="btn-qr-show" onclick="showClassQR()">📱 반 전용 QR 보기</button>
     </div>
   </div>
 
@@ -243,6 +257,18 @@
   <div class="admin-bar">
     <button class="admin-btn" onclick="toggleTeacherMode()">교사 모드</button>
     <span id="teacher-status" class="teacher-badge">교사용 (작성자 표시 & 삭제 가능)</span>
+  </div>
+
+  <!-- QR코드 출력 모달 -->
+  <div id="qr-modal" class="modal">
+    <div class="modal-content" style="text-align: center;">
+      <h3 id="qr-modal-title">👥 학급 전용 QR코드</h3>
+      <p style="font-size: 13px; color: #64748b; margin-bottom: 15px;">학생들이 스캔하면 해당 반으로 바로 접속되며 반 이동이 잠깁니다.</p>
+      <img id="qr-img" src="" alt="QR Code" style="width: 200px; height: 200px; margin: 0 auto; display: block; border: 1px solid #cbd5e1; border-radius: 8px; padding: 6px; background: white;">
+      <div class="btn-group" style="margin-top: 15px;">
+        <button class="btn-secondary" onclick="closeModal('qr-modal')">닫기</button>
+      </div>
+    </div>
   </div>
 
   <!-- 작성 모달 -->
@@ -406,12 +432,19 @@
       openInputModal('');
     }
 
-    function changeClass(classId) {
+    function changeClass(classId, updateUrl = true) {
       if (currentClassRef && useFirebase) currentClassRef.off();
       currentClass = classId;
       tempPins = JSON.parse(localStorage.getItem('school_map_pins_' + currentClass) || '[]');
       expandedClusterIndex = null;
       renderPins();
+
+      // 주소창 URL 업데이트 (히스토리 차곡차곡 남지 않게 replaceState 사용)
+      if (updateUrl) {
+        const classNum = currentClass.replace('class', '');
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?class=' + classNum;
+        window.history.replaceState({path: newUrl}, '', newUrl);
+      }
 
       if (useFirebase && database) {
         currentClassRef = database.ref('pins/' + currentClass);
@@ -425,26 +458,36 @@
       }
     }
 
-    // 🔗 URL 파라미터(?class=class2) 확인 및 자동 세팅
+    // 📱 현재 반 QR코드 모달 팝업 띄우기
+    function showClassQR() {
+      const classNum = currentClass.replace('class', '');
+      const classUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?class=' + classNum;
+      
+      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(classUrl)}`;
+      document.getElementById('qr-img').src = qrApiUrl;
+      document.getElementById('qr-modal-title').innerText = `👥 ${classNum}반 전용 QR코드`;
+      openModal('qr-modal');
+    }
+
+    // 초기 접속 시 URL 파라미터(?class=5 등) 확인
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
-      const urlClass = urlParams.get('class');
+      let urlClass = urlParams.get('class');
       const selectEl = document.getElementById('class-select');
 
       if (urlClass) {
-        let targetClass = urlClass;
-        if (!targetClass.startsWith('class')) {
-          targetClass = 'class' + targetClass;
+        if (!urlClass.startsWith('class')) {
+          urlClass = 'class' + urlClass;
         }
 
-        if (selectEl.querySelector(`option[value="${targetClass}"]`)) {
-          selectEl.value = targetClass;
-          selectEl.disabled = true; // URL로 지정된 경우 학생들이 반을 바꾸지 못하게 고정
-          changeClass(targetClass);
+        if (selectEl.querySelector(`option[value="${urlClass}"]`)) {
+          selectEl.value = urlClass;
+          selectEl.disabled = true; // URL을 타고 들어온 학생은 반 선택 불가능하게 고정
+          changeClass(urlClass, false);
           return;
         }
       }
-      changeClass('class1');
+      changeClass('class1', false);
     });
 
     function openInputModal(defaultPlace = '') {
@@ -593,7 +636,7 @@
         if (prompt('교사 비밀번호를 입력하세요:') === '1234') {
           isTeacher = true;
           document.getElementById('teacher-status').style.display = 'inline-block';
-          document.getElementById('class-select').disabled = false; // 교사모드에서는 드롭다운 잠금 해제
+          document.getElementById('class-select').disabled = false; // 교사모드에서는 반 이동 잠금 해제
           alert('교사 모드가 활성화되었습니다.');
           renderPins();
         } else alert('비밀번호가 틀렸습니다.');
