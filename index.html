@@ -41,13 +41,53 @@
     .pin {
       position: absolute;
       transform: translate(-50%, -50%);
-      font-size: 24px;
+      font-size: 26px;
       cursor: pointer;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
-      transition: transform 0.15s ease;
+      transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
       z-index: 10;
     }
-    .pin:active { transform: translate(-50%, -50%) scale(1.4); }
+    .pin:active { transform: translate(-50%, -50%) scale(1.3); }
+
+    /* 펼쳐진 이모지 강조 효과 */
+    .pin.expanded {
+      z-index: 20;
+      animation: popIn 0.3s ease-out;
+    }
+
+    @keyframes popIn {
+      0% { transform: translate(-50%, -50%) scale(0); }
+      100% { transform: translate(-50%, -50%) scale(1); }
+    }
+
+    /* 겹친 이모지 개수 표시 배지 */
+    .cluster-badge {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      background: #ef4444;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 10px;
+      border: 2px solid white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      cursor: pointer;
+      z-index: 15;
+    }
+
+    /* 펼쳐질 때 중심점을 나타내는 보조 원 */
+    .cluster-center-ring {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 16px;
+      height: 16px;
+      border: 2px dashed #6366f1;
+      border-radius: 50%;
+      background: rgba(99, 102, 241, 0.15);
+      z-index: 8;
+      pointer-events: none;
+    }
 
     /* 모달 팝업창 */
     .modal {
@@ -79,7 +119,13 @@
     .btn-secondary { background: #f1f5f9; color: #475569; }
     .btn-danger { background: #ef4444; color: white; }
 
-    .view-emoji-box { font-size: 48px; text-align: center; margin-bottom: 10px; }
+    /* 상세보기 스타일 */
+    .view-emoji-box { font-size: 44px; text-align: center; margin-bottom: 6px; }
+    .view-place-badge { 
+      text-align: center; font-weight: 700; font-size: 15px; color: #4f46e5; 
+      background: #eef2ff; border: 1px solid #c7d2fe; padding: 6px 12px; 
+      border-radius: 20px; margin-bottom: 12px; display: block;
+    }
     .view-text-box { 
       background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; 
       border-radius: 8px; font-size: 14px; color: #334155; line-height: 1.5;
@@ -96,7 +142,7 @@
 
   <div class="header">
     <h1>🏫 우리 학교 장소감 지도</h1>
-    <p>지도를 터치하여 이모지와 장소감을 느껴보세요!</p>
+    <p>지도를 터치하여 장소 이름과 장소감을 남겨보세요!</p>
   </div>
 
   <div id="map-container">
@@ -105,13 +151,19 @@
 
   <div class="admin-bar">
     <button class="admin-btn" onclick="toggleTeacherMode()">교사 모드</button>
-    <span id="teacher-status" class="teacher-badge">교사용 (작성자 표시 & 전체 삭제 가능)</span>
+    <span id="teacher-status" class="teacher-badge">교사용 (작성자 표시 & 삭제 가능)</span>
   </div>
 
   <!-- 작성 모달 -->
   <div id="input-modal" class="modal">
     <div class="modal-content">
       <h3>📍 이 장소의 느낌 남기기</h3>
+      
+      <div class="form-group">
+        <label>장소 이름</label>
+        <input type="text" id="input-place" placeholder="예: 3학년 2반 교실, 운동장, 급식실">
+      </div>
+
       <div class="form-group">
         <label>표현할 이모지</label>
         <select id="input-emoji">
@@ -123,14 +175,17 @@
           <option value="😐">😐 그냥그래</option>
         </select>
       </div>
+
       <div class="form-group">
         <label>이유 (장소감) - 전체 공개</label>
         <textarea id="input-text" rows="3" placeholder="예: 친구들과 수다 떨 수 있어서 편안해요!"></textarea>
       </div>
+
       <div class="form-group">
         <label>학번/이름 (선생님만 확인 가능)</label>
         <input type="text" id="input-author" placeholder="예: 10201 홍길동">
       </div>
+
       <div class="btn-group">
         <div class="btn-row">
           <button class="btn-secondary" onclick="closeModal('input-modal')">취소</button>
@@ -144,6 +199,7 @@
   <div id="view-modal" class="modal">
     <div class="modal-content">
       <div id="view-emoji" class="view-emoji-box">🥰</div>
+      <div id="view-place" class="view-place-badge">📍 장소 이름</div>
       <div id="view-text" class="view-text-box">장소감 내용이 출력됩니다.</div>
       <div id="view-author" class="view-author-box"></div>
       
@@ -164,34 +220,35 @@
       localStorage.setItem('school_map_device_id', myDeviceId);
     }
 
-    const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT_ID.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
-    };
-
     let tempPins = [];
     let isTeacher = false;
     let clickX = 0, clickY = 0;
     let selectedPinId = null;
+    let currentSelectedPlace = '';
+    let expandedClusterIndex = null; // 현재 펼쳐진 그룹 번호
 
     const mapContainer = document.getElementById('map-container');
 
+    // 지도 빈 공간 클릭 시
     mapContainer.addEventListener('click', (e) => {
-      if (e.target.classList.contains('pin')) return;
+      if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
+
+      // 펼쳐진 클러스터가 있다면 닫기
+      if (expandedClusterIndex !== null) {
+        expandedClusterIndex = null;
+        renderPins();
+        return;
+      }
 
       const rect = mapContainer.getBoundingClientRect();
       clickX = ((e.clientX - rect.left) / rect.width) * 100;
       clickY = ((e.clientY - rect.top) / rect.height) * 100;
 
-      openInputModal();
+      openInputModal('');
     });
 
-    function openInputModal() {
+    function openInputModal(defaultPlace = '') {
+      document.getElementById('input-place').value = defaultPlace;
       document.getElementById('input-text').value = '';
       document.getElementById('input-author').value = '';
       openModal('input-modal');
@@ -200,30 +257,34 @@
     function openModal(id) { document.getElementById(id).style.display = 'flex'; }
     function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
+    // 같은 장소에 내 느낌 추가
     function addSameLocation() {
       closeModal('view-modal');
-      openInputModal();
+      openInputModal(currentSelectedPlace);
     }
 
     function saveData() {
+      const place = document.getElementById('input-place').value.trim();
       const emoji = document.getElementById('input-emoji').value;
-      const text = document.getElementById('input-text').value;
-      const author = document.getElementById('input-author').value;
+      const text = document.getElementById('input-text').value.trim();
+      const author = document.getElementById('input-author').value.trim();
 
+      if (!place) {
+        alert('장소 이름을 입력해주세요! (예: 급식실, 운동장)');
+        return;
+      }
       if (!text || !author) {
-        alert('내용과 이름을 모두 작성해주세요!');
+        alert('장소감 내용과 이름을 모두 입력해주세요!');
         return;
       }
 
       const pinId = 'pin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
-      const offsetX = (Math.random() - 0.5) * 1.6;
-      const offsetY = (Math.random() - 0.5) * 1.6;
-
       const pinData = {
         id: pinId,
-        x: Math.min(Math.max(clickX + offsetX, 2), 98),
-        y: Math.min(Math.max(clickY + offsetY, 2), 98),
+        x: clickX,
+        y: clickY,
+        place: place,
         emoji: emoji,
         text: text,
         author: author,
@@ -232,49 +293,139 @@
       };
 
       tempPins.push(pinData);
+      expandedClusterIndex = null;
       renderPins();
       closeModal('input-modal');
     }
 
+    // 근접한 핀들을 클러스터(그룹)로 묶는 함수
+    function groupPinsIntoClusters(pins) {
+      const threshold = 3.5; // 3.5% 이내로 가까우면 겹친 것으로 판단
+      const clusters = [];
+      const visited = new Set();
+
+      for (let i = 0; i < pins.length; i++) {
+        if (visited.has(pins[i].id)) continue;
+
+        const cluster = [pins[i]];
+        visited.add(pins[i].id);
+
+        for (let j = i + 1; j < pins.length; j++) {
+          if (visited.has(pins[j].id)) continue;
+
+          const dx = pins[i].x - pins[j].x;
+          const dy = pins[i].y - pins[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < threshold) {
+            cluster.push(pins[j]);
+            visited.add(pins[j].id);
+          }
+        }
+        clusters.push(cluster);
+      }
+      return clusters;
+    }
+
     function renderPins() {
-      document.querySelectorAll('.pin').forEach(pin => pin.remove());
+      // 기존 핀, 배지, 안내 링 제거
+      document.querySelectorAll('.pin, .cluster-badge, .cluster-center-ring').forEach(el => el.remove());
 
-      tempPins.forEach(data => {
-        const pinEl = document.createElement('div');
-        pinEl.className = 'pin';
-        pinEl.style.left = `${data.x}%`;
-        pinEl.style.top = `${data.y}%`;
-        pinEl.innerText = data.emoji;
+      const clusters = groupPinsIntoClusters(tempPins);
 
-        pinEl.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectedPinId = data.id;
-          clickX = data.x;
-          clickY = data.y;
+      clusters.forEach((cluster, index) => {
+        // 그룹의 중심 좌표 계산
+        const centerX = cluster.reduce((sum, p) => sum + p.x, 0) / cluster.length;
+        const centerY = cluster.reduce((sum, p) => sum + p.y, 0) / cluster.length;
 
-          document.getElementById('view-emoji').innerText = data.emoji;
-          document.getElementById('view-text').innerText = data.text;
-          
-          const authorBox = document.getElementById('view-author');
-          if (isTeacher) {
-            authorBox.innerText = `👤 작성자: ${data.author}`;
-            authorBox.style.display = 'block';
+        const isExpanded = (expandedClusterIndex === index);
+
+        if (cluster.length === 1) {
+          // 단일 핀
+          createPinElement(cluster[0], cluster[0].x, cluster[0].y);
+        } else {
+          // 겹친 핀들 (2개 이상)
+          if (!isExpanded) {
+            // 1. 접힌 상태: 대표 이모지 1개 + 개수 표시 배지 (+N)
+            const topPin = createPinElement(cluster[cluster.length - 1], centerX, centerY);
+
+            const badge = document.createElement('div');
+            badge.className = 'cluster-badge';
+            badge.innerText = `+${cluster.length}`;
+            badge.style.left = `${centerX + 2.2}%`;
+            badge.style.top = `${centerY - 2.2}%`;
+
+            const expandHandler = (e) => {
+              e.stopPropagation();
+              expandedClusterIndex = index;
+              renderPins();
+            };
+
+            badge.addEventListener('click', expandHandler);
+            topPin.addEventListener('click', expandHandler);
+
+            mapContainer.appendChild(badge);
           } else {
-            authorBox.style.display = 'none';
+            // 2. 펼쳐진 상태: 동그랗게 파열(Spiderfy)되어 주변으로 배치됨
+            const ring = document.createElement('div');
+            ring.className = 'cluster-center-ring';
+            ring.style.left = `${centerX}%`;
+            ring.style.top = `${centerY}%`;
+            mapContainer.appendChild(ring);
+
+            const radius = Math.min(7 + cluster.length * 0.8, 14); // 핀 개수에 비례하는 반지름
+
+            cluster.forEach((pinData, i) => {
+              const angle = (2 * Math.PI * i) / cluster.length - (Math.PI / 2);
+              const spreadX = Math.min(Math.max(centerX + radius * Math.cos(angle), 3), 97);
+              const spreadY = Math.min(Math.max(centerY + radius * Math.sin(angle), 3), 97);
+
+              const pinEl = createPinElement(pinData, spreadX, spreadY);
+              pinEl.classList.add('expanded');
+            });
           }
-
-          const deleteBtn = document.getElementById('btn-delete');
-          if (data.deviceId === myDeviceId || isTeacher) {
-            deleteBtn.style.display = 'block';
-          } else {
-            deleteBtn.style.display = 'none';
-          }
-
-          openModal('view-modal');
-        });
-
-        mapContainer.appendChild(pinEl);
+        }
       });
+    }
+
+    function createPinElement(data, x, y) {
+      const pinEl = document.createElement('div');
+      pinEl.className = 'pin';
+      pinEl.style.left = `${x}%`;
+      pinEl.style.top = `${y}%`;
+      pinEl.innerText = data.emoji;
+
+      pinEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedPinId = data.id;
+        clickX = data.x;
+        clickY = data.y;
+        currentSelectedPlace = data.place || '학교 장소';
+
+        document.getElementById('view-emoji').innerText = data.emoji;
+        document.getElementById('view-place').innerText = `📍 ${currentSelectedPlace}`;
+        document.getElementById('view-text').innerText = data.text;
+        
+        const authorBox = document.getElementById('view-author');
+        if (isTeacher) {
+          authorBox.innerText = `👤 작성자: ${data.author}`;
+          authorBox.style.display = 'block';
+        } else {
+          authorBox.style.display = 'none';
+        }
+
+        const deleteBtn = document.getElementById('btn-delete');
+        if (data.deviceId === myDeviceId || isTeacher) {
+          deleteBtn.style.display = 'block';
+        } else {
+          deleteBtn.style.display = 'none';
+        }
+
+        openModal('view-modal');
+      });
+
+      mapContainer.appendChild(pinEl);
+      return pinEl;
     }
 
     function deleteCurrentPin() {
@@ -282,6 +433,7 @@
 
       if (confirm('이 장소감을 정말 삭제하시겠습니까?')) {
         tempPins = tempPins.filter(p => p.id !== selectedPinId);
+        expandedClusterIndex = null;
         renderPins();
         closeModal('view-modal');
       }
@@ -294,6 +446,7 @@
           isTeacher = true;
           document.getElementById('teacher-status').style.display = 'inline-block';
           alert('교사 모드가 활성화되었습니다.');
+          renderPins();
         } else {
           alert('비밀번호가 틀렸습니다.');
         }
@@ -301,6 +454,7 @@
         isTeacher = false;
         document.getElementById('teacher-status').style.display = 'none';
         alert('학생 모드로 전환되었습니다.');
+        renderPins();
       }
     }
   </script>
