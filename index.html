@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>우리 학교 장소감 지도</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+  
+  <style>
+    * { box-sizing: border-box; font-family: 'Pretendard', -apple-system, sans-serif; }
+    body { margin: 0; padding: 15px 10px; background-color: #f8fafc; display: flex; flex-direction: column; align-items: center; }
+    
+    .header { text-align: center; margin-bottom: 15px; width: 100%; max-width: 600px; }
+    .header h1 { font-size: 20px; color: #1e293b; margin: 0 0 6px 0; }
+    .header p { font-size: 13px; color: #64748b; margin: 0; }
+
+    /* 지도 컨테이너 */
+    #map-container {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      background: #ffffff;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      touch-action: manipulation;
+    }
+    
+    #map-img {
+      width: 100%;
+      height: auto;
+      display: block;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+
+    /* 지도 위에 찍히는 이모지 핀 */
+    .pin {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      font-size: 26px;
+      cursor: pointer;
+      filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
+      transition: transform 0.15s ease;
+      z-index: 10;
+    }
+    .pin:active { transform: translate(-50%, -50%) scale(1.4); }
+
+    /* 모달 팝업창 */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      justify-content: center; align-items: center;
+      z-index: 100; padding: 20px;
+    }
+    .modal-content {
+      background: white; padding: 20px; border-radius: 16px;
+      width: 100%; max-width: 360px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+    .modal-content h3 { margin: 0 0 15px 0; font-size: 18px; color: #0f172a; text-align: center; }
+    
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 700; color: #475569; margin-bottom: 4px; }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none;
+    }
+    .form-group textarea { resize: none; }
+    
+    .btn-group { display: flex; gap: 8px; margin-top: 16px; }
+    button { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+    .btn-primary { background: #4f46e5; color: white; }
+    .btn-secondary { background: #f1f5f9; color: #475569; }
+    .btn-danger { background: #ef4444; color: white; }
+
+    /* 상세보기 내부 스타일 */
+    .view-emoji-box { font-size: 48px; text-align: center; margin-bottom: 10px; }
+    .view-text-box { 
+      background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px; 
+      border-radius: 8px; font-size: 14px; color: #334155; line-height: 1.5;
+      min-height: 60px; word-break: break-all; white-space: pre-wrap;
+    }
+    .view-author-box { font-size: 12px; color: #ef4444; font-weight: bold; margin-top: 8px; text-align: right; }
+
+    /* 하단 교사 컨트롤바 */
+    .admin-bar { margin-top: 15px; display: flex; gap: 8px; align-items: center; }
+    .admin-btn { background: #e2e8f0; color: #334155; padding: 6px 12px; font-size: 12px; border-radius: 20px; border: none; }
+    .teacher-badge { background: #ef4444; color: white; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>🏫 우리 학교 장소감 지도</h1>
+    <p>지도를 터치하여 이모지와 장소감을 느껴보세요!</p>
+  </div>
+
+  <!-- 지도 영역 -->
+  <div id="map-container">
+    <img id="map-img" src="https://i.imgur.com/Eb11NtB.png" alt="2026학년도 학교 구조도">
+  </div>
+
+  <div class="admin-bar">
+    <button class="admin-btn" onclick="toggleTeacherMode()">교사 모드</button>
+    <span id="teacher-status" class="teacher-badge">교사용 (작성자 표시 & 전체 삭제 가능)</span>
+  </div>
+
+  <!-- 작성 모달 -->
+  <div id="input-modal" class="modal">
+    <div class="modal-content">
+      <h3>📍 이 장소의 느낌 남기기</h3>
+      <div class="form-group">
+        <label>표현할 이모지</label>
+        <select id="input-emoji">
+          <option value="😊">😊 기쁨 / 즐거움</option>
+          <option value="🌿">🌿 편안함 / 휴식</option>
+          <option value="😱">😱 무서움 / 부담감</option>
+          <option value="😴">😴 피곤함 / 지루함</option>
+          <option value="🔥">🔥 열정 / 집중</option>
+          <option value="🍔">🍔 맛있는 음식/신남</option>
+          <option value="💬">💬 수다 / 친구와 함께</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>이유 (장소감) - 전체 공개</label>
+        <textarea id="input-text" rows="3" placeholder="예: 친구들과 수다 떨 수 있어서 편안해요!"></textarea>
+      </div>
+      <div class="form-group">
+        <label>학번/이름 (선생님만 확인 가능)</label>
+        <input type="text" id="input-author" placeholder="예: 10201 홍길동">
+      </div>
+      <div class="btn-group">
+        <button class="btn-secondary" onclick="closeModal('input-modal')">취소</button>
+        <button class="btn-primary" onclick="saveData()">등록하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 상세보기 및 삭제 모달 -->
+  <div id="view-modal" class="modal">
+    <div class="modal-content">
+      <div id="view-emoji" class="view-emoji-box">😊</div>
+      <div id="view-text" class="view-text-box">장소감 내용이 출력됩니다.</div>
+      <div id="view-author" class="view-author-box"></div>
+      
+      <div class="btn-group">
+        <button id="btn-delete" class="btn-danger" style="display: none;" onclick="deleteCurrentPin()">삭제하기</button>
+        <button class="btn-secondary" onclick="closeModal('view-modal')">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 기기 고유 ID
+    let myDeviceId = localStorage.getItem('school_map_device_id');
+    if (!myDeviceId) {
+      myDeviceId = 'dev_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+      localStorage.setItem('school_map_device_id', myDeviceId);
+    }
+
+    // Firebase 설정 (필요 시 정보 입력)
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    let tempPins = [];
+    let isTeacher = false;
+    let clickX = 0, clickY = 0;
+    let selectedPinId = null;
+
+    const mapContainer = document.getElementById('map-container');
+
+    mapContainer.addEventListener('click', (e) => {
+      if (e.target.classList.contains('pin')) return;
+
+      const rect = mapContainer.getBoundingClientRect();
+      clickX = ((e.clientX - rect.left) / rect.width) * 100;
+      clickY = ((e.clientY - rect.top) / rect.height) * 100;
+
+      document.getElementById('input-text').value = '';
+      document.getElementById('input-author').value = '';
+      openModal('input-modal');
+    });
+
+    function openModal(id) { document.getElementById(id).style.display = 'flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+    function saveData() {
+      const emoji = document.getElementById('input-emoji').value;
+      const text = document.getElementById('input-text').value;
+      const author = document.getElementById('input-author').value;
+
+      if (!text || !author) {
+        alert('내용과 이름을 모두 작성해주세요!');
+        return;
+      }
+
+      const pinId = 'pin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+      const pinData = {
+        id: pinId,
+        x: clickX,
+        y: clickY,
+        emoji: emoji,
+        text: text,
+        author: author,
+        deviceId: myDeviceId,
+        timestamp: Date.now()
+      };
+
+      tempPins.push(pinData);
+      renderPins();
+      closeModal('input-modal');
+    }
+
+    function renderPins() {
+      document.querySelectorAll('.pin').forEach(pin => pin.remove());
+
+      tempPins.forEach(data => {
+        const pinEl = document.createElement('div');
+        pinEl.className = 'pin';
+        pinEl.style.left = `${data.x}%`;
+        pinEl.style.top = `${data.y}%`;
+        pinEl.innerText = data.emoji;
+
+        pinEl.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedPinId = data.id;
+
+          document.getElementById('view-emoji').innerText = data.emoji;
+          document.getElementById('view-text').innerText = data.text;
+          
+          const authorBox = document.getElementById('view-author');
+          if (isTeacher) {
+            authorBox.innerText = `👤 작성자: ${data.author}`;
+            authorBox.style.display = 'block';
+          } else {
+            authorBox.style.display = 'none';
+          }
+
+          const deleteBtn = document.getElementById('btn-delete');
+          if (data.deviceId === myDeviceId || isTeacher) {
+            deleteBtn.style.display = 'block';
+          } else {
+            deleteBtn.style.display = 'none';
+          }
+
+          openModal('view-modal');
+        });
+
+        mapContainer.appendChild(pinEl);
+      });
+    }
+
+    function deleteCurrentPin() {
+      if (!selectedPinId) return;
+
+      if (confirm('이 장소감을 정말 삭제하시겠습니까?')) {
+        tempPins = tempPins.filter(p => p.id !== selectedPinId);
+        renderPins();
+        closeModal('view-modal');
+      }
+    }
+
+    function toggleTeacherMode() {
+      if (!isTeacher) {
+        const pwd = prompt('교사 비밀번호를 입력하세요:');
+        if (pwd === '1234') {
+          isTeacher = true;
+          document.getElementById('teacher-status').style.display = 'inline-block';
+          alert('교사 모드가 활성화되었습니다.');
+        } else {
+          alert('비밀번호가 틀렸습니다.');
+        }
+      } else {
+        isTeacher = false;
+        document.getElementById('teacher-status').style.display = 'none';
+        alert('학생 모드로 전환되었습니다.');
+      }
+    }
+  </script>
+</body>
+</html>
