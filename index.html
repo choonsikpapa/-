@@ -292,6 +292,9 @@
           <option value="😢">😢 슬픔</option>
           <option value="😡">😡 화남</option>
           <option value="😐">😐 그냥그래</option>
+          <option value="😒">😒 지루함</option>
+          <option value="🤮">🤮 더러움</option>
+          <option value="😱">😱 무서움</option>
         </select>
       </div>
 
@@ -400,9 +403,7 @@
     function zoomOut() { if (currentScale > 1) { currentScale -= 0.5; if (currentScale === 1) { panX = 0; panY = 0; } updateMapTransform(); } }
     function resetZoom() { currentScale = 1; panX = 0; panY = 0; updateMapTransform(); }
 
-    // 지도를 다루는 이벤트 처리
     mapContainer.addEventListener('pointerdown', (e) => {
-      // 핀, 숫자 배지, Zoom 버튼을 누른 경우 지도의 드래그 처리를 무시함
       if (e.target.closest('.zoom-controls') || e.target.closest('.pin') || e.target.closest('.cluster-badge')) {
         isDragging = false;
         return;
