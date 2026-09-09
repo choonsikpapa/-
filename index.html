@@ -128,16 +128,17 @@
     .pin {
       position: absolute;
       transform: translate(-50%, -50%);
-      font-size: 26px;
+      font-size: 28px;
       cursor: pointer;
       filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));
       transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-      z-index: 10;
+      z-index: 20;
+      pointer-events: auto;
     }
     .pin:active { transform: translate(-50%, -50%) scale(1.3); }
 
     .pin.expanded {
-      z-index: 20;
+      z-index: 30;
       animation: popIn 0.3s ease-out;
     }
 
@@ -158,7 +159,8 @@
       border: 2px solid white;
       box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       cursor: pointer;
-      z-index: 15;
+      z-index: 25;
+      pointer-events: auto;
     }
 
     .cluster-center-ring {
@@ -259,7 +261,7 @@
     <span id="teacher-status" class="teacher-badge">교사용 (작성자 표시 & 삭제 가능)</span>
   </div>
 
-  <!-- QR코드 출력 모달 -->
+  <!-- QR코드 모달 -->
   <div id="qr-modal" class="modal">
     <div class="modal-content" style="text-align: center;">
       <h3 id="qr-modal-title">👥 학급 전용 QR코드</h3>
@@ -398,19 +400,36 @@
     function zoomOut() { if (currentScale > 1) { currentScale -= 0.5; if (currentScale === 1) { panX = 0; panY = 0; } updateMapTransform(); } }
     function resetZoom() { currentScale = 1; panX = 0; panY = 0; updateMapTransform(); }
 
+    // 지도를 다루는 이벤트 처리
     mapContainer.addEventListener('pointerdown', (e) => {
-      if (e.target.closest('.zoom-controls')) return;
-      isDragging = true; hasMoved = false;
-      startX = e.clientX - panX; startY = e.clientY - panY;
-      mapContainer.setPointerCapture(e.pointerId);
+      // 핀, 숫자 배지, Zoom 버튼을 누른 경우 지도의 드래그 처리를 무시함
+      if (e.target.closest('.zoom-controls') || e.target.closest('.pin') || e.target.closest('.cluster-badge')) {
+        isDragging = false;
+        return;
+      }
+
+      isDragging = true;
+      hasMoved = false;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+      
+      try {
+        mapContainer.setPointerCapture(e.pointerId);
+      } catch (err) {}
     });
 
     mapContainer.addEventListener('pointermove', (e) => {
       if (!isDragging) return;
-      const dx = e.clientX - startX; const dy = e.clientY - startY;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      
+      if (Math.abs(dx - panX) > 4 || Math.abs(dy - panY) > 4) {
+        hasMoved = true;
+      }
+
       if (currentScale > 1) {
-        if (Math.abs(dx - panX) > 4 || Math.abs(dy - panY) > 4) hasMoved = true;
-        panX = dx; panY = dy;
+        panX = dx;
+        panY = dy;
         updateMapTransform();
       }
     });
@@ -418,14 +437,24 @@
     mapContainer.addEventListener('pointerup', (e) => {
       if (!isDragging) return;
       isDragging = false;
-      if (!hasMoved) handleMapClick(e);
+      try {
+        mapContainer.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+
+      if (!hasMoved) {
+        handleMapClick(e);
+      }
     });
 
     function handleMapClick(e) {
-      if (e.target.classList.contains('pin') || e.target.classList.contains('cluster-badge')) return;
+      if (e.target.closest('.pin') || e.target.closest('.cluster-badge')) return;
+      
       if (expandedClusterIndex !== null) {
-        expandedClusterIndex = null; renderPins(); return;
+        expandedClusterIndex = null;
+        renderPins();
+        return;
       }
+      
       const rect = mapWrapper.getBoundingClientRect();
       clickX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
       clickY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
@@ -439,7 +468,6 @@
       expandedClusterIndex = null;
       renderPins();
 
-      // 주소창 URL 업데이트 (히스토리 차곡차곡 남지 않게 replaceState 사용)
       if (updateUrl) {
         const classNum = currentClass.replace('class', '');
         const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?class=' + classNum;
@@ -458,7 +486,6 @@
       }
     }
 
-    // 📱 현재 반 QR코드 모달 팝업 띄우기
     function showClassQR() {
       const classNum = currentClass.replace('class', '');
       const classUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?class=' + classNum;
@@ -469,7 +496,6 @@
       openModal('qr-modal');
     }
 
-    // 초기 접속 시 URL 파라미터(?class=5 등) 확인
     window.addEventListener('DOMContentLoaded', () => {
       const urlParams = new URLSearchParams(window.location.search);
       let urlClass = urlParams.get('class');
@@ -482,7 +508,7 @@
 
         if (selectEl.querySelector(`option[value="${urlClass}"]`)) {
           selectEl.value = urlClass;
-          selectEl.disabled = true; // URL을 타고 들어온 학생은 반 선택 불가능하게 고정
+          selectEl.disabled = true;
           changeClass(urlClass, false);
           return;
         }
@@ -598,7 +624,9 @@
 
       pinEl.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectedPinId = data.id; clickX = data.x; clickY = data.y;
+        selectedPinId = data.id;
+        clickX = data.x;
+        clickY = data.y;
         currentSelectedPlace = data.place || '학교 장소';
 
         document.getElementById('view-emoji').innerText = data.emoji;
@@ -607,7 +635,7 @@
         
         const authorBox = document.getElementById('view-author');
         if (isTeacher) {
-          authorBox.innerText = `👤 작성자: ${data.author}`;
+          authorBox.innerText = `👤 작성자: ${data.author || '익명'}`;
           authorBox.style.display = 'block';
         } else {
           authorBox.style.display = 'none';
@@ -636,7 +664,7 @@
         if (prompt('교사 비밀번호를 입력하세요:') === '1234') {
           isTeacher = true;
           document.getElementById('teacher-status').style.display = 'inline-block';
-          document.getElementById('class-select').disabled = false; // 교사모드에서는 반 이동 잠금 해제
+          document.getElementById('class-select').disabled = false;
           alert('교사 모드가 활성화되었습니다.');
           renderPins();
         } else alert('비밀번호가 틀렸습니다.');
